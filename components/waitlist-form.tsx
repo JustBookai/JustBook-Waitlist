@@ -1,22 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { joinWaitlist } from "@/app/actions";
 
 export function WaitlistForm() {
-  const [isPending] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
 
-  const handleSubmit = async () => {
-    toast.success("Thank you for signing up!");
+  const handleSubmit = async (formData: FormData) => {
+    startTransition(async () => {
+      const result = await joinWaitlist(formData);
+      if (result.success) {
+        toast.success("Welcome! Check your email for confirmation.");
+        setEmail("");
+      } else {
+        toast.error(result.error || "Something went wrong.");
+      }
+    });
   };
 
   return (
     <form action={handleSubmit} className="w-full space-y-4 mb-8">
-      <div className="flex overflow-hidden rounded-xl bg-white/5 p-1 ring-1 gap-1 ring-black/10 dark:ring-white/20 focus-within:ring-2 focus-within:ring-blue-500!">
+      <div className="flex overflow-hidden rounded-xl bg-white/5 p-1 ring-1 gap-1 ring-black/10 dark:ring-white/20 focus-within:ring-2 focus-within:ring-[#12A19A]!">
         <Input
           id="email"
           name="email"
