@@ -3,6 +3,7 @@ import type React from "react";
 interface SocialIconProps {
   href: string;
   icon: React.ReactNode;
+  label?: string;
   target?: string;
   rel?: string;
 }
@@ -10,6 +11,7 @@ interface SocialIconProps {
 export function SocialIcon({
   href,
   icon,
+  label,
   target,
   rel,
 }: SocialIconProps) {
@@ -18,6 +20,7 @@ export function SocialIcon({
       href={href}
       target={target}
       rel={rel}
+      aria-label={label}
       className="text-gray-400 hover:text-white transition-all duration-300 ease-in-out transform hover:scale-110"
     >
       {icon}
