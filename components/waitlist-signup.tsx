@@ -33,7 +33,15 @@ export function WaitlistSignup() {
   const [stats, setStats] = useState({ signups: 200, surveyTaps: 45 });
 
   useEffect(() => {
+    // Initial fetch
     getLiveStats().then(setStats);
+
+    // Poll for updates every 5 seconds
+    const interval = setInterval(() => {
+      getLiveStats().then(setStats);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -82,7 +90,7 @@ export function WaitlistSignup() {
         </motion.div>
 
         <motion.div custom={4} variants={variants} className="w-full max-w-md mx-auto">
-          <WaitlistForm />
+          <WaitlistForm onSuccess={() => getLiveStats().then(setStats)} />
         </motion.div>
 
         <motion.div custom={3} variants={variants} className="flex flex-col items-center justify-center space-y-4">

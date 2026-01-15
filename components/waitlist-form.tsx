@@ -5,20 +5,43 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { joinWaitlist } from "@/app/actions";
+import { getAdminData, joinWaitlist, unsubscribeWaitlist } from "@/app/actions";
 
-export function WaitlistForm() {
+export function WaitlistForm({ onSuccess }: { onSuccess?: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
 
+  const handleUnsubscribe = async (unsubEmail: string) => {
+    startTransition(async () => {
+      const result = await unsubscribeWaitlist(unsubEmail);
+      if (result.success) {
+        toast.success("You have been removed from the waitlist.");
+        setEmail("");
+        onSuccess?.();
+      } else {
+        toast.error(result.error || "Failed to unsubscribe.");
+      }
+    });
+  };
+
   const handleSubmit = async (formData: FormData) => {
+    const emailValue = formData.get("email") as string;
     startTransition(async () => {
       const result = await joinWaitlist(formData);
       if (result.success) {
         toast.success("Welcome! Check your email for confirmation.");
         setEmail("");
+        onSuccess?.();
+      } else if (result.error === 'ALREADY_REGISTERED') {
+        toast.info("You are already on the waitlist!", {
+          description: "Would you like to opt out instead?",
+          action: {
+            label: "Opt Out",
+            onClick: () => handleUnsubscribe(emailValue),
+          },
+        });
       } else {
-        toast.error(result.error || "Something went wrong.");
+        toast.error(result.message || result.error || "Something went wrong.");
       }
     });
   };
