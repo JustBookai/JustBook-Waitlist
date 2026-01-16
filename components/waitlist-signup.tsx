@@ -64,7 +64,7 @@ export function WaitlistSignup() {
             </span>
           </motion.div>
           <motion.h1 custom={2} variants={variants} className="font-extrabold text-5xl sm:text-[72px] leading-[1.1] text-white tracking-tight">
-            The Future of <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#12A19A] to-[#FF921E]">Booking</span>
+            The Future of <span className="text-white">Booking</span>
           </motion.h1>
           <motion.p custom={3} variants={variants} className="text-lg sm:text-xl text-muted-foreground text-balance max-w-[600px] mx-auto">
             Secure your sessions digitally. No queues, no delays—just pure efficiency for your favorite service providers.
@@ -109,7 +109,7 @@ export function WaitlistSignup() {
               <Star size={18} /> About JustBook
             </h3>
             <p className="text-muted-foreground leading-relaxed">
-              JustBook is an upcoming Zambian SAAS multiplatform application designed to bridge the gap between service excellence and convenience. Securing your slot digitally means you spend time where it matters, not in a queue.
+              JustBook is an upcoming Zambian SaaS multiplatform application designed to bridge the gap between service excellence and convenience. Securing your slot digitally means you spend time where it matters, not in a queue.
             </p>
           </motion.div>
         </div>
