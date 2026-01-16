@@ -2,7 +2,7 @@
 
 import nodemailer from 'nodemailer';
 import { generateEmailHtml } from '@/components/email-template';
-import fs from 'fs/promises';
+import { supabase } from '@/lib/supabase';
 import path from 'path';
 
 // Gmail Transporter Setup
@@ -16,123 +16,34 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-const STATS_FILE = path.join(process.cwd(), 'stats.json');
-const WAITLIST_CSV = path.join(process.cwd(), 'waitlist.csv');
-const OPT_OUTS_CSV = path.join(process.cwd(), 'opt-outs.csv');
 const LOGO_PATH = path.join(process.cwd(), 'public', 'JB.png');
 
-// Initialize files if they don't exist
-async function initFiles() {
+export async function getLiveStats() {
     try {
-        await fs.access(WAITLIST_CSV);
-    } catch {
-        await fs.writeFile(WAITLIST_CSV, 'Name,Email,Date\n');
-    }
-    try {
-        await fs.access(OPT_OUTS_CSV);
-    } catch {
-        await fs.writeFile(OPT_OUTS_CSV, 'Name,Email,Date\n');
-    }
-    try {
-        await fs.access(STATS_FILE);
-    } catch {
-        await fs.writeFile(STATS_FILE, JSON.stringify({ signups: 0, surveyTaps: 0 }, null, 2));
-    }
-}
+        // Get signup count
+        const { count: signups, error: signupError } = await supabase
+            .from('waitlist')
+            .select('*', { count: 'exact', head: true });
 
-async function getStats() {
-    await initFiles();
-    try {
-        const data = await fs.readFile(STATS_FILE, 'utf-8');
-        const stats = JSON.parse(data);
-        const users = await getWaitlistUsers();
-        if (stats.signups !== users.length) {
-            stats.signups = users.length;
-            await fs.writeFile(STATS_FILE, JSON.stringify(stats, null, 2));
-        }
-        return stats;
+        if (signupError) throw signupError;
+
+        // Get survey taps
+        const { data: statsData, error: statsError } = await supabase
+            .from('stats')
+            .select('survey_taps')
+            .eq('id', 1)
+            .single();
+
+        if (statsError) throw statsError;
+
+        return {
+            signups: signups || 0,
+            surveyTaps: statsData?.survey_taps || 0
+        };
     } catch (error) {
-        const users = await getWaitlistUsers();
-        const initialStats = { signups: users.length, surveyTaps: 0 };
-        await fs.writeFile(STATS_FILE, JSON.stringify(initialStats, null, 2));
-        return initialStats;
+        console.error('Error fetching live stats:', error);
+        return { signups: 0, surveyTaps: 0 };
     }
-}
-
-async function updateStats(updates: { signups?: number, surveyTaps?: number }) {
-    const current = await getStats();
-    const next = { ...current, ...updates };
-    await fs.writeFile(STATS_FILE, JSON.stringify(next, null, 2));
-    return next;
-}
-
-export async function getWaitlistUsers(): Promise<{ name: string, email: string, date: string }[]> {
-    await initFiles();
-    try {
-        const data = await fs.readFile(WAITLIST_CSV, 'utf-8');
-        const lines = data.split('\n').slice(1).filter(line => line.trim() !== '');
-        return lines.map(line => {
-            const [name, email, date] = line.split(',');
-            return { name, email, date };
-        });
-    } catch (error) {
-        return [];
-    }
-}
-
-export async function getOptOutUsers(): Promise<{ name: string, email: string, date: string }[]> {
-    await initFiles();
-    try {
-        const data = await fs.readFile(OPT_OUTS_CSV, 'utf-8');
-        const lines = data.split('\n').slice(1).filter(line => line.trim() !== '');
-        return lines.map(line => {
-            const [name, email, date] = line.split(',');
-            return { name, email, date };
-        });
-    } catch (error) {
-        return [];
-    }
-}
-
-async function saveUser(name: string, email: string) {
-    const users = await getWaitlistUsers();
-    if (!users.some(u => u.email === email)) {
-        const date = new Date().toISOString();
-        const newLine = `${name.replace(/,/g, '')},${email},${date}\n`;
-        await fs.appendFile(WAITLIST_CSV, newLine);
-
-        // Remove from opt-outs if they re-register
-        const optOuts = await getOptOutUsers();
-        const remainingOptOuts = optOuts.filter(u => u.email !== email);
-        if (optOuts.length !== remainingOptOuts.length) {
-            const header = 'Name,Email,Date\n';
-            const content = remainingOptOuts.map(u => `${u.name},${u.email},${u.date}`).join('\n');
-            await fs.writeFile(OPT_OUTS_CSV, header + (content ? content + '\n' : ''));
-        }
-        return true;
-    }
-    return false;
-}
-
-async function removeUser(email: string) {
-    const users = await getWaitlistUsers();
-    const userToRemove = users.find(u => u.email === email);
-    if (userToRemove) {
-        const remainingUsers = users.filter(u => u.email !== email);
-        const header = 'Name,Email,Date\n';
-        const content = remainingUsers.map(u => `${u.name},${u.email},${u.date}`).join('\n');
-        await fs.writeFile(WAITLIST_CSV, header + (content ? content + '\n' : ''));
-
-        // Add to opt-outs
-        const optOuts = await getOptOutUsers();
-        if (!optOuts.some(u => u.email === email)) {
-            const date = new Date().toISOString();
-            const newLine = `${userToRemove.name},${email},${date}\n`;
-            await fs.appendFile(OPT_OUTS_CSV, newLine);
-        }
-        return userToRemove;
-    }
-    return null;
 }
 
 export async function joinWaitlist(formData: FormData) {
@@ -149,12 +60,26 @@ export async function joinWaitlist(formData: FormData) {
         return { error: 'Server configuration error' };
     }
 
-    const users = await getWaitlistUsers();
-    if (users.some(u => u.email === email)) return { error: 'ALREADY_REGISTERED', message: 'You are already on the waitlist!' };
-
     try {
-        await saveUser(name, email);
-        await updateStats({ signups: users.length + 1 });
+        // 1. Check for duplicates in Supabase
+        const { data: existingUser } = await supabase
+            .from('waitlist')
+            .select('email')
+            .eq('email', email)
+            .single();
+
+        if (existingUser) {
+            return { error: 'ALREADY_REGISTERED', message: 'You are already on the waitlist!' };
+        }
+
+        // 2. Save user to Supabase
+        const { error: insertError } = await supabase
+            .from('waitlist')
+            .insert([{ name, email }]);
+
+        if (insertError) throw insertError;
+
+        // 3. Send Email via Gmail
         const emailHtml = generateEmailHtml({ email, name, type: 'welcome' });
 
         await transporter.sendMail({
@@ -170,19 +95,42 @@ export async function joinWaitlist(formData: FormData) {
         });
         return { success: true };
     } catch (error) {
-        console.error('Email error:', error);
+        console.error('Join waitlist error:', error);
         return { success: true, warning: 'Joined, but confirmation email failed.' };
     }
 }
 
 export async function unsubscribeWaitlist(email: string) {
     const sanitizedEmail = email.toLowerCase().trim();
-    const removedUser = await removeUser(sanitizedEmail);
-    if (removedUser) {
-        const usersSize = (await getWaitlistUsers()).length;
-        await updateStats({ signups: usersSize });
+
+    try {
+        // 1. Get user data before deleting
+        const { data: userData, error: fetchError } = await supabase
+            .from('waitlist')
+            .select('name')
+            .eq('email', sanitizedEmail)
+            .single();
+
+        if (fetchError || !userData) {
+            return { error: 'Email not found on waitlist.' };
+        }
+
+        // 2. Add to opt-outs (history table)
+        await supabase
+            .from('opt_outs')
+            .insert([{ name: userData.name, email: sanitizedEmail }]);
+
+        // 3. Delete from waitlist
+        const { error: deleteError } = await supabase
+            .from('waitlist')
+            .delete()
+            .eq('email', sanitizedEmail);
+
+        if (deleteError) throw deleteError;
+
+        // 4. Send Confirmation Email
         try {
-            const emailHtml = generateEmailHtml({ email: sanitizedEmail, name: removedUser.name, type: 'unsubscribe' });
+            const emailHtml = generateEmailHtml({ email: sanitizedEmail, name: userData.name, type: 'unsubscribe' });
             await transporter.sendMail({
                 from: `"JustBook" <${process.env.GMAIL_USER}>`,
                 to: sanitizedEmail,
@@ -195,44 +143,73 @@ export async function unsubscribeWaitlist(email: string) {
                 }]
             });
         } catch (e) { }
+
         return { success: true };
+    } catch (error) {
+        console.error('Unsubscribe error:', error);
+        return { error: 'Failed to unsubscribe.' };
     }
-    return { error: 'Email not found on waitlist.' };
 }
 
 export async function trackSurveyTap() {
     try {
-        const stats = await getStats();
-        await updateStats({ surveyTaps: stats.surveyTaps + 1 });
+        const { data, error } = await supabase.rpc('increment_survey_taps');
+
+        if (error) {
+            // Fallback if RPC is not set up
+            const { data: currentStats } = await supabase
+                .from('stats')
+                .select('survey_taps')
+                .eq('id', 1)
+                .single();
+
+            await supabase
+                .from('stats')
+                .update({ survey_taps: (currentStats?.survey_taps || 0) + 1 })
+                .eq('id', 1);
+        }
+
         return { success: true };
     } catch (error) {
         return { error: 'Failed to track tap' };
     }
 }
 
-export async function getLiveStats() {
-    return await getStats();
-}
-
 export async function getAdminData() {
-    const registered = await getWaitlistUsers();
-    const optOuts = await getOptOutUsers();
-    const stats = await getStats();
-    return { registered, optOuts, stats };
+    try {
+        const { data: registered } = await supabase
+            .from('waitlist')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        const { data: optOuts } = await supabase
+            .from('opt_outs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        const stats = await getLiveStats();
+
+        return {
+            registered: registered || [],
+            optOuts: optOuts || [],
+            stats
+        };
+    } catch (error) {
+        console.error('Error fetching admin data:', error);
+        return { registered: [], optOuts: [], stats: { signups: 0, surveyTaps: 0 } };
+    }
 }
 
 export async function downloadWaitlistCSV() {
-    try {
-        return await fs.readFile(WAITLIST_CSV, 'utf-8');
-    } catch {
-        return 'Name,Email,Date\n';
-    }
+    const { data } = await supabase.from('waitlist').select('name, email, created_at');
+    const header = 'Name,Email,Date\n';
+    const content = data?.map(u => `${u.name},${u.email},${u.created_at}`).join('\n') || '';
+    return header + content;
 }
 
 export async function downloadOptOutsCSV() {
-    try {
-        return await fs.readFile(OPT_OUTS_CSV, 'utf-8');
-    } catch {
-        return 'Name,Email,Date\n';
-    }
+    const { data } = await supabase.from('opt_outs').select('name, email, created_at');
+    const header = 'Name,Email,Date\n';
+    const content = data?.map(u => `${u.name},${u.email},${u.created_at}`).join('\n') || '';
+    return header + content;
 }

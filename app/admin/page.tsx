@@ -129,7 +129,7 @@ export default function AdminPage() {
                                             <td className="p-4 text-sm font-bold text-teal-400">{user.name}</td>
                                             <td className="p-4 text-sm font-medium opacity-80">{user.email}</td>
                                             <td className="p-4 text-right text-[10px] text-muted-foreground">
-                                                {user.date ? new Date(user.date).toLocaleDateString() : '-'}
+                                                {(user.created_at || user.date) ? new Date(user.created_at || user.date).toLocaleDateString() : '-'}
                                             </td>
                                         </tr>
                                     )) || (
