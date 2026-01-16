@@ -109,7 +109,7 @@ export function WaitlistSignup() {
               <Star size={18} /> About JustBook
             </h3>
             <p className="text-muted-foreground leading-relaxed">
-              JustBook is an upcoming Zambian SaaS multiplatform application designed to bridge the gap between service excellence and convenience. Securing your slot digitally means you spend time where it matters, not in a queue.
+              JustBook is an upcoming Zambian SaaS multiplatform application designed to bridge the gap between service excellence and convenience. Securing your slot digitally means you spend time where it really matters, not in a queue.
             </p>
           </motion.div>
         </div>
