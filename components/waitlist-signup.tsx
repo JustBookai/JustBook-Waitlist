@@ -60,7 +60,7 @@ export function WaitlistSignup() {
         <header className="text-center space-y-6 mb-16 max-w-[800px]">
           <motion.div custom={1} variants={variants}>
             <span className="px-4 py-1.5 rounded-full bg-[#12A19A]/10 text-[#12A19A] text-xs font-bold uppercase tracking-widest border border-[#12A19A]/20 inline-block mb-4">
-              Coming Soon to Zambia
+              Coming Soon to Zambia v2.0
             </span>
           </motion.div>
           <motion.h1 custom={2} variants={variants} className="font-extrabold text-5xl sm:text-[72px] leading-[1.1] text-white tracking-tight">
